@@ -41,6 +41,9 @@ class TypeMap
 		mapType(Types.BIGINT, "BIGINT", TypeCat.NUMERIC)
 		mapType(Types.NUMERIC, "NUMERIC", TypeCat.NUMERIC)
 		mapType(Types.DECIMAL, "DECIMAL", TypeCat.NUMERIC)
+		mapType(Types.FLOAT, "FLOAT", TypeCat.NUMERIC)
+		mapType(Types.REAL, "REAL", TypeCat.NUMERIC)
+		mapType(Types.DOUBLE, "DOUBLE", TypeCat.NUMERIC)
 
 		mapType(Types.BINARY, "BINARY", TypeCat.BINARY)
 		mapType(Types.VARBINARY, "VARBINARY", TypeCat.BINARY)
