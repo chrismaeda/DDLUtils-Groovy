@@ -4,6 +4,7 @@ import gddlutils.model.Database
 import gddlutils.model.Table
 import gddlutils.model.ModelWriter
 import gddlutils.platform.JdbcModelReader
+import gddlutils.platform.mysql.MySqlPlatform;
 import gddlutils.platform.oracle.OraclePlatform
 import groovy.xml.MarkupBuilder
 import java.sql.Connection;
@@ -51,6 +52,16 @@ class ReadSchema
 		String user = jdbcProps.getProperty("jdbc.user");
 		String pass = jdbcProps.getProperty("jdbc.pass");
 		String schema = jdbcProps.getProperty("jdbc.schema");
+		
+		/*String modelFile = "C:/Users/S/Desktop/schemaModelFile.xml"
+		
+		String driver = "com.mysql.jdbc.Driver";
+		String url = "jdbc:mysql://localhost:3306/kcttrunk";
+		// String url = "jdbc:mysql://localhost:3306/hylafax";
+		String user = "root";
+		String pass = "root";
+		String schema = "kcttrunk";
+		// String schema = "hylafax";*/
 
 		// open db connection
 		Connection conn = null;
@@ -70,7 +81,8 @@ class ReadSchema
 		jreader.conn = conn
 		jreader.dbmeta = conn.metaData
 		jreader.db = db
-		jreader.platform = new OraclePlatform()
+		// jreader.platform = new OraclePlatform()
+		jreader.platform = new MySqlPlatform()
 		
 		// read tables
 		TreeMap<String,Table> tables = jreader.getTables(null, schema, null)

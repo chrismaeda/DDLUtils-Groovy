@@ -3,6 +3,7 @@ package gddlutils.main
 import gddlutils.model.Database
 import gddlutils.model.ModelReader
 import gddlutils.platform.SchemaDDLWriter
+import gddlutils.platform.mysql.MySqlPlatform;
 import gddlutils.platform.oracle.OraclePlatform
 
 class GenDDL {
@@ -17,6 +18,9 @@ class GenDDL {
 		String modelfile = args[0]
 		String ddlfile = args[1]
 
+		/*String modelfile = "C:/Users/S/Desktop/schemaModelFile.xml"
+		String ddlfile = "C:/Users/S/Desktop/dbDefFile.sql"*/
+
 		// read model		
 		File file = new File(modelfile)
 		ModelReader mr = new ModelReader()
@@ -25,12 +29,17 @@ class GenDDL {
 
 		// write ddl
 		OraclePlatform ora = new OraclePlatform();
+		MySqlPlatform mysqlPlatform = new MySqlPlatform()
+
 		SchemaDDLWriter ddl = new SchemaDDLWriter()
+
 		ddl.db = db
-		ddl.platform = ora
+		// ddl.platform = ora
+		ddl.platform = mysqlPlatform
+
 		ddl.computeDDL()
+
 		ddl.writeDDL(ddlfile)
-		
 	}
 
 }
