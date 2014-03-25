@@ -183,6 +183,7 @@ public class ModelReader
 		for (idxcol in idxcols) {
 			IndexColumn idx = new IndexColumn()
 			idx.columnName = idxcol.@name
+			idx.columnLength = Integer.parseInt(idxcol.@length.text())
 			// lookup column from name
 			Column column = table.getColumnByName(idx.columnName)
 			assert column != null, "Invalid Column " + idx.columnName
@@ -270,6 +271,7 @@ public class ModelReader
 			IndexColumn colref = new IndexColumn()
 			colref.ordinalPosition = key_seq
 			colref.columnName = idxcol.@name
+			colref.columnLength = Integer.parseInt(idxcol.@length.text())
 			Column column = table.getColumnByName(colref.columnName)
 			assert column != null, "Invalid Index Column " + colref.columnName
 			colref.column = column

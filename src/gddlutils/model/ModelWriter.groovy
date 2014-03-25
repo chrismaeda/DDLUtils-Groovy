@@ -53,7 +53,7 @@ public class ModelWriter
 						PrimaryKey pk = tab.primaryKey
 						primaryKey(name:pk.name) {
 							for (IndexColumn idxCol in pk.columns) {
-								indexColumn(name:idxCol.columnName)
+								indexColumn(name:idxCol.columnName, length:idxCol.columnLength)
 							}
 						}
 					}
@@ -80,7 +80,7 @@ public class ModelWriter
 							Index idx = idxentry.value
 							index(name:idx.name, unique:idx.unique) {
 								for (IndexColumn idxCol in idx.columns) {
-									indexColumn(name:idxCol.columnName)
+									indexColumn(name:idxCol.columnName, length:idxCol.columnLength)
 								}
 							}
 						}

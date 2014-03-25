@@ -1,5 +1,6 @@
 package gddlutils.platform.oracle
 
+import java.sql.Connection;
 import java.sql.Types
 import java.util.List;
 
@@ -103,7 +104,13 @@ class OraclePlatform extends Platform
 		
 	}
 
-		@Override
+	@Override
+	public void gotTablePrimaryKeys(Connection conn, Database db, Table table) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
 	public void gotTableForeignKeys(Database db, Table table) {
 		// TODO Auto-generated method stub
 		
@@ -128,6 +135,12 @@ class OraclePlatform extends Platform
 		// TODO Oracle does the same with UNIQUE constraints
 		
 		// TODO handle tablespaces
+	}
+
+	@Override
+	public void gotTableIndices(Connection conn, Database db, Table table) {
+		// TODO Auto-generated method stub
+
 	}
 
 	protected void fixupRowidColumn(Database db, Table table, Column col)

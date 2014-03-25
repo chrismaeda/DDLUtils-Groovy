@@ -5,4 +5,5 @@ class IndexColumn
 	int ordinalPosition
 	Column column
 	String columnName
+	int columnLength
 }

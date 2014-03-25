@@ -1,5 +1,7 @@
 package gddlutils.platform
 
+import java.sql.Connection;
+
 import gddlutils.model.Column
 import gddlutils.model.Database
 import gddlutils.model.Table
@@ -40,11 +42,31 @@ abstract class Platform
 	// table primary key captured
 	abstract void gotTablePrimaryKeys(Database db, Table table)
 
+	/**
+	 * This method captures primary key information for the specified table. The 
+	 * connection information will be used to get query from information_schema.
+	 * 
+	 * @param conn Database connection
+	 * @param db Database instance
+	 * @param table Table of the database
+	 */
+	abstract void gotTablePrimaryKeys(Connection conn, Database db, Table table)
+
 	// table foreign keys captured
 	abstract void gotTableForeignKeys(Database db, Table table)
 
 	// table indices captured
 	abstract void gotTableIndices(Database db, Table table)
+
+	/**
+	 * This method captures index key information for the specified table. The
+	 * connection information will be used to get query from information_schema.
+	 *
+	 * @param conn Database connection
+	 * @param db Database instance
+	 * @param table Table of the database
+	 */
+	abstract void gotTableIndices(Connection conn, Database db, Table table)
 
 	abstract boolean hasStandardType(Column col)
 	
