@@ -1,5 +1,8 @@
 package gddlutils.platform.mysql
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.Types;
 import java.util.List
 
@@ -19,6 +22,8 @@ class MySqlPlatform extends Platform {
 	// Reserver word in MySql for Primary Key
 	static final String PRIMARY_KEY_KEYWORD = "PRIMARY";
 	static Map stdTypesMap
+	private final String PRIMARY_KEY_STATISTIC_QUERY = "SELECT * FROM INFORMATION_SCHEMA.`STATISTICS` WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = 'PRIMARY'"
+	private final String INDICES_STATISTIC_QUERY = "SELECT * FROM INFORMATION_SCHEMA.`STATISTICS` WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?"
 	
 	static {
 		stdTypesMap = [:]
@@ -95,10 +100,46 @@ class MySqlPlatform extends Platform {
 		col.scale = null
 	}
 
-	@Override
 	public void gotTablePrimaryKeys(Database db, Table table) {
 		// TODO Auto-generated method stub
 
+	}
+
+	@Override
+	public void gotTablePrimaryKeys(Connection conn, Database db, Table table) {
+		PreparedStatement pstmt = conn.prepareStatement(PRIMARY_KEY_STATISTIC_QUERY)
+
+		pstmt.setString(1, table.catalog)
+		pstmt.setString(2, table.name)
+
+		ResultSet rs = pstmt.executeQuery()
+
+		PrimaryKey pk = table.primaryKey
+
+		while (rs.next()) {
+			String columnName = rs.getString("COLUMN_NAME")
+			short keySeq = rs.getShort("SEQ_IN_INDEX")
+			String pkName = rs.getString("INDEX_NAME")
+			int indexLength = rs.getInt("SUB_PART")
+
+			Column column = table.getColumnByName(columnName)
+			assert column != null, "Column $columnName does not exist"
+			// column is part of primary key
+			column.primaryKey = true
+
+			// create pk object if necessary
+			if (pk == null) {
+				pk = new PrimaryKey()
+				pk.name = pkName
+			}
+			IndexColumn idxCol = new IndexColumn()
+			idxCol.ordinalPosition = keySeq
+			idxCol.column = column
+			idxCol.columnName = column.name
+			idxCol.columnLength = indexLength
+			pk.addColumn(idxCol)
+		}
+		table.primaryKey = pk
 	}
 
 	@Override
@@ -114,13 +155,44 @@ class MySqlPlatform extends Platform {
 	}
 
 	@Override
+	public void gotTableIndices(Connection conn, Database db, Table table) {
+		TreeMap<String,Index> indexes = table.indices
+
+		if (indexes == null) {
+			return
+		}
+
+		PreparedStatement pstmt = conn.prepareStatement(INDICES_STATISTIC_QUERY)
+
+		pstmt.setString(1, table.catalog)
+		pstmt.setString(2, table.name)
+
+		ResultSet rs = pstmt.executeQuery()
+
+		while (rs.next()) {
+			String columnName = rs.getString("COLUMN_NAME")
+			short keySeq = rs.getShort("SEQ_IN_INDEX")
+			String indexName = rs.getString("INDEX_NAME")
+			int indexColumnLength = rs.getInt("SUB_PART")
+			
+			Index indx = indexes[indexName]
+
+			for (IndexColumn indexColumn in indx.columns) {
+				if (columnName.equals(indexColumn.columnName) && indexColumnLength > 0) {
+					indexColumn.columnLength = indexColumnLength
+				}
+			}
+		}
+	}
+
+	@Override
 	public boolean hasStandardType(Column col) {
 		String typeName = stdTypesMap[col.typeCode]
-		
+
 		if (typeName != null && typeName.equalsIgnoreCase(col.typeName)) {
 			return true
 		}
-		
+
 		return false
 	}
 
@@ -141,7 +213,7 @@ class MySqlPlatform extends Platform {
 		// TODO prepend schema to table name ???
 		buf.append(table.name)
 		buf.append(" ( \n")
-		
+
 		// generate column definitions
 		int colcnt = 0
 		for (Column col in table.columns) {
@@ -150,26 +222,32 @@ class MySqlPlatform extends Platform {
 			String colsize = col.getTypeSizeForDDL(this)
 			String coldefault = col.defaultVal
 			boolean notnull = col.required
-			
+
+			// TODO: Check if we can remove this check.
+			if (coltype.equalsIgnoreCase("longtext")) {
+				colsize = ""
+			}
+
 			if (colcnt > 0) {
 				buf.append(",\n")
 			}
-			buf.append("\t$colname $coltype $colsize")
+			buf.append("\t`$colname` $coltype $colsize")
 			if (coldefault) {
-				buf.append(" DEFAULT $coldefault")
+				buf.append(" DEFAULT '$coldefault'")
 			}
 			if (notnull) {
 				buf.append(" NOT NULL")
 			}
 			colcnt++			
 		}
-		
+
 		// primary key constraint
-		if (colcnt > 0) {
-			buf.append(",\n")
-		}
 		PrimaryKey pk = table.primaryKey
 		if (pk != null) {
+			if (colcnt > 0) {
+				buf.append(",\n")
+			}
+
 			// In case of MySql, PRIMARY KEY name is always "PRIMARY".
 			// So, no need to specify primary key name.
 			buf.append("\tCONSTRAINT PRIMARY KEY (")
@@ -178,16 +256,19 @@ class MySqlPlatform extends Platform {
 				if (pkcolcnt > 0) {
 					buf.append(", ")
 				}
-				buf.append(idxcol.columnName)
+				buf.append("`").append(idxcol.columnName).append("`")
+				if (idxcol.columnLength > 0) {
+					buf.append("(").append(idxcol.columnLength).append(")")
+				}
 				pkcolcnt++
 			}
-			buf.append(")\n")
+			buf.append(")")
 		}
-		
-		buf.append(")")
+
+		buf.append("\n)")
 
 		stmts.add(buf.toString())
-		
+
 		//
 		// create index statements
 		//
@@ -195,11 +276,11 @@ class MySqlPlatform extends Platform {
 			for (idxentry in table.indices.entrySet()) {
 				String key = idxentry.key
 				Index idx = idxentry.value
-				
+
 				if (idx.name.equalsIgnoreCase(PRIMARY_KEY_KEYWORD)) {
 					continue;
 				}
-				
+
 				buf.setLength(0)
 				if (idx.unique) {
 					buf.append("CREATE UNIQUE INDEX ")
@@ -210,17 +291,21 @@ class MySqlPlatform extends Platform {
 				buf.append(" ON ")
 				buf.append(table.name)
 				buf.append("\n\t(")
-				
+
 				int idxcolcnt = 0
 				for (IndexColumn idxcol in idx.columns) {
 					if (idxcolcnt > 0) {
 						buf.append(", ")
 					}
 					buf.append(idxcol.columnName)
+					
+					if (idxcol.columnLength > 0) {
+						buf.append(" (").append(idxcol.columnLength).append(")")
+					}
 					idxcolcnt++
 				}
 				buf.append(")")
-				
+
 				stmts.add(buf.toString())
 			}
 		}
@@ -229,8 +314,7 @@ class MySqlPlatform extends Platform {
 	}
 
 	@Override
-	public List<String> generateTableForeignKeyConstraints(Database db,
-			Table table) {
+	public List<String> generateTableForeignKeyConstraints(Database db, Table table) {
 		List<String> stmts = []
 		StringBuffer buf = new StringBuffer()
 
@@ -243,10 +327,10 @@ class MySqlPlatform extends Platform {
 				ForeignKey fk = fkEntry.value
 				String fkname = fk.name
 				String fktable = fk.foreignTableName
-				
+
 				// reset string buffer
 				buf.setLength(0)
-				
+
 				if (fkCount == 0) {
 					buf.append("\n\n/******\n  Foreign Keys for TABLE $table.name \n******/\n\n")
 					fkCount++
@@ -256,7 +340,7 @@ class MySqlPlatform extends Platform {
 				buf.append("\n\tADD CONSTRAINT ")
 				buf.append(fkname)
 				buf.append("\n\tFOREIGN KEY (")
-				
+
 				// emit local column list
 				int colCount = 0
 				for (ColumnReference colref in fk.references) {
@@ -279,7 +363,7 @@ class MySqlPlatform extends Platform {
 					colCount++
 				}
 				buf.append(")")
-	
+
 				stmts.add(buf.toString())
 			}
 		}

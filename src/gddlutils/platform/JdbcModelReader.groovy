@@ -13,6 +13,7 @@ import gddlutils.model.Index
 import gddlutils.model.IndexColumn
 import gddlutils.model.PrimaryKey
 import gddlutils.model.Table
+import gddlutils.platform.mysql.MySqlPlatform;
 
 /**
  * Reverse Engineer Schema from JDBC Metadata
@@ -64,7 +65,7 @@ class JdbcModelReader
 				}
 			}
 		}
-		
+
 		// fetch table columns
 		for (tabentry in tables) {
 			Table newTab = tabentry.value
@@ -216,6 +217,12 @@ class JdbcModelReader
 		PrimaryKey pk = null
 		
 		try {
+			if (platform instanceof MySqlPlatform) {
+				platform.gotTablePrimaryKeys(conn, db, table)
+
+				return
+			}
+
 			pkMeta = dbmeta.getPrimaryKeys(table.catalog, table.schema, table.name)
 			while (pkMeta.next())
 			{
@@ -372,7 +379,11 @@ class JdbcModelReader
 
 			// update db and do column callbacks if they have been set
 			if (db != null && platform != null) {
-				platform.gotTableIndices(db, table)
+				if (platform instanceof MySqlPlatform) {
+					platform.gotTableIndices(conn, db, table)
+				} else {
+					platform.gotTableIndices(db, table)
+				}
 			}
 		}
 		finally {
