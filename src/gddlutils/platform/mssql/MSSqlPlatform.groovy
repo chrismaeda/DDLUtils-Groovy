@@ -1,49 +1,34 @@
-package gddlutils.platform.oracle
+package gddlutils.platform.mssql
 
+import java.awt.event.ItemEvent;
 import java.sql.Connection;
-import java.sql.Types
+import java.sql.Types;
 import java.util.List;
+import java.util.Map;
 
-import gddlutils.model.Column
-import gddlutils.model.ColumnReference
-import gddlutils.model.Database
-import gddlutils.model.ForeignKey
-import gddlutils.model.Index
-import gddlutils.model.IndexColumn
-import gddlutils.model.PrimaryKey
-import gddlutils.model.Table
-import gddlutils.model.TypeMap
-import gddlutils.platform.Platform
+import gddlutils.model.Column;
+import gddlutils.model.ColumnReference;
+import gddlutils.model.Database;
+import gddlutils.model.ForeignKey;
+import gddlutils.model.Index;
+import gddlutils.model.IndexColumn;
+import gddlutils.model.PrimaryKey;
+import gddlutils.model.Table;
+import gddlutils.model.TypeMap;
+import gddlutils.platform.Platform;
 
-class OraclePlatform extends Platform
-{
-	static Map StdTypeMap
-	
+class MSSqlPlatform extends Platform {
+
+	static Map stdTypesMap
+
 	static {
-		StdTypeMap = [:]
-		StdTypeMap[Types.CHAR] = "CHAR"
-		StdTypeMap[Types.VARCHAR] = "VARCHAR2"
-		StdTypeMap[Types.CLOB] = "CLOB"
-		StdTypeMap[Types.DECIMAL] = "NUMBER"
-		StdTypeMap[Types.NUMERIC] = "NUMBER"
+		stdTypesMap = [:]
 	}
-	
-	public OraclePlatform()
-	{
-		// set name in superclass
-		name = "ORACLE"
+
+	public MSSqlPlatform() {
+		name = "SQL Server"
 	}
-	
-	@Override
-	public boolean hasStandardType(Column col)
-	{
-		String typeName = StdTypeMap[col.typeCode]
-		if (typeName != null && typeName.equalsIgnoreCase(typeName)) {
-			return true
-		}
-		return false
-	}
-	
+
 	@Override
 	public void gotTableModel(Database db, Table table) {
 		// TODO Auto-generated method stub
@@ -51,51 +36,49 @@ class OraclePlatform extends Platform
 	}
 
 	@Override
-	public void gotTableColumns(Database db, Table table)
-	{
-		// type-specific fixups for each column
+	public void gotTableColumns(Database db, Table table) {
+
 		for (Column col in table.columns) {
+
 			switch (col.typeCode) {
+				case Types.TINYINT:
+				case Types.SMALLINT:
+				case Types.INTEGER:
+				case Types.REAL:
+					col.size = null
+					break
 				case Types.DECIMAL:
-					fixupDecimalColumn(db, table, col)
+					break
+				case Types.NUMERIC:
 					break
 				case Types.FLOAT:
-					fixupFloatColumn(db, table, col)
+				case Types.DOUBLE:
 					break
 				case Types.DATE:
 				case Types.TIMESTAMP:
 					fixupDateTimeColumn(db, table, col)
 					break
-				case Types.ROWID:
-					fixupRowidColumn(db, table, col)
-					break
 			}
-	
-			// handle column default
-			if (TypeMap.isTextType(col.typeCode)) {
-				String colDefault = col.defaultVal
-				if (colDefault != null) {
-					String modDefault = unescape(colDefault, "'", "''");
-					if (! colDefault.equals(modDefault)) {
-						col.defaultVal = modDefault
-					}
-				}
-			}
-				
-			// If type is standard, then do not save
-			// native type override info.  For example,
-			// if JBDC type is VARCHAR and native type is VARCHAR2
-			// then no need to save override info.  On the other
-			// hand, if JDBC type is TIMESTAMP and native type
-			// is DATE, we need to save this info since JDBC TIMESTAMP
-			// can be represented by more than one Oracle type.
+			
+			/*
+			 * If a data type found in MySql exists in JDBC with same name then
+			 * there is not issue. Don't write type name in native type names.
+			 *
+			 * But if the type does not found with the same name with JDBC then
+			 * make it save a native column type.
+			 */
 			if (hasStandardType(col)) {
 				col.typeName = null
 			}
+			
 			// move native type code to platform map
 			saveNativeColumnType(db, table, col)
 		}
-				
+	}
+
+	protected void fixupDateTimeColumn(Database db, Table table, Column col) {
+		col.size = null
+		col.scale = null
 	}
 
 	@Override
@@ -107,7 +90,7 @@ class OraclePlatform extends Platform
 	@Override
 	public void gotTablePrimaryKeys(Connection conn, Database db, Table table) {
 		// TODO Auto-generated method stub
-
+		
 	}
 
 	@Override
@@ -117,117 +100,41 @@ class OraclePlatform extends Platform
 	}
 
 	@Override
-	public void gotTableIndices(Database db, Table table)
-	{
-		//
-		// Oracle automatically creates a unique index for the primary key
-		// so remove any indexes that have same name as primary key.  These
-		// indices are not explicit parts of the schema so each platform should
-		// create them if necessary.
-		//
-		PrimaryKey pk = table.primaryKey
-		String pkName = pk?.name
+	public void gotTableIndices(Database db, Table table) {
+
+		/* 
+		 * Removes indexes for the table if index name is of the same name as Primary Key name.
+		 * Compares name of primary key with key names of indexes.
+		 */
+
+		PrimaryKey primaryKey = table.primaryKey
 		
-		if (pkName && table.indices != null && table.indices.containsKey(pkName)) {
-			table.indices.remove(pkName)
+		if (primaryKey != null) {
+			Index indx = table.indices?.remove(primaryKey.name)
+
+			println "$indx.name Removed"
 		}
-		
-		// TODO Oracle does the same with UNIQUE constraints
-		
-		// TODO handle tablespaces
 	}
 
 	@Override
 	public void gotTableIndices(Connection conn, Database db, Table table) {
 		// TODO Auto-generated method stub
-
-	}
-
-	protected void fixupRowidColumn(Database db, Table table, Column col)
-	{
-		// rowid cols don't need size and scale
-		col.size = null
-		col.scale = null
-	}
-	
-	protected void fixupDecimalColumn(Database db, Table table, Column col)
-	{
-		if (col.size == null || col.size == 0) {
-			// column type is "NUMBER" with no size and scale
-			col.size = null
-			col.scale = null
-		}
-		else {
-			switch (col.size) {
-				case 1:
-					if (col.scale == null || col.scale == 0) {
-						col.typeCode = Types.BIT
-					}
-					break
-				case 3:
-					if (col.scale == null || col.scale == 0) {
-						col.typeCode = Types.TINYINT
-					}
-					break
-				case 5:
-					if (col.scale == null || col.scale == 0) {
-						col.typeCode = Types.SMALLINT
-					}
-					break
-					
-				case 18:
-					// IF NUMBER(18,0) THEN LEAVE TYPE AS DECIMAL
-					if (col.scale > 0) {
-						col.typeCode = Types.REAL
-					}
-					break;
-				case 22:
-					if (col.scale == 0) {
-						col.typeCode = Types.INTEGER
-					}
-					break;
-				case 38:
-					if (col.scale == 0)
-					{
-						col.typeCode = Types.BIGINT
-					}
-					else
-					{
-						col.typeCode = Types.DOUBLE
-					}
-					break;
-			}
-		}
-	}
-
-	protected void fixupFloatColumn(Database db, Table table, Column col)
-	{
-		switch (col.size) {
-			case 63:
-				col.typeCode = Types.REAL
-				break
-			case 126:
-				col.typeCode = Types.DOUBLE
-				break
-		}
-	}
-	
-	protected void fixupDateTimeColumn(Database db, Table table, Column col)
-	{
-		// ddlutils code
-		// 1. set DATE types to TIMESTAMP
-		// 2. did weird manipulation with default values
-		//
-		// We don't do any of this right now.
 		
-		// size and scale are fixed
-		col.size = null
-		col.scale = null
 	}
 
 	@Override
-	public List<String> generateTableDDL(Database db, Table table)
-	{
+	public boolean hasStandardType(Column col) {
+		String typeName = stdTypesMap[col.typeCode]
+
+		if (typeName != null && typeName.equalsIgnoreCase(col.typeName)) {
+			return true
+		}
+
+		return false
+	}
+
+	@Override
+	public List<String> generateTableDDL(Database db, Table table) {
 		List<String> stmts = []
 		StringBuffer buf = new StringBuffer()
 		
@@ -252,7 +159,12 @@ class OraclePlatform extends Platform
 			String colsize = col.getTypeSizeForDDL(this)
 			String coldefault = col.defaultVal
 			boolean notnull = col.required
-			
+
+			// TODO: Check if we can remove this check.
+			if (coltype.equalsIgnoreCase("ntext")) {
+				colsize = ""
+			}
+
 			if (colcnt > 0) {
 				buf.append(",\n")
 			}
@@ -330,8 +242,8 @@ class OraclePlatform extends Platform
 	}
 
 	@Override
-	public List<String> generateTableForeignKeyConstraints(Database db,	Table table)
-	{
+	public List<String> generateTableForeignKeyConstraints(Database db, Table table) {
+
 		List<String> stmts = []
 		StringBuffer buf = new StringBuffer()
 
@@ -344,10 +256,10 @@ class OraclePlatform extends Platform
 				ForeignKey fk = fkentry.value
 				String fkname = fk.name
 				String fktable = fk.foreignTableName
-				
+
 				// reset string buffer
 				buf.setLength(0)
-				
+
 				if (fkcnt == 0) {
 					buf.append("\n\n/******\n  Foreign Keys for TABLE $table.name \n******/\n\n")
 					fkcnt++
@@ -357,7 +269,7 @@ class OraclePlatform extends Platform
 				buf.append("\n\tADD CONSTRAINT ")
 				buf.append(fkname)
 				buf.append("\n\tFOREIGN KEY (")
-				
+
 				// emit local column list
 				int colcnt = 0
 				for (ColumnReference colref in fk.references) {
@@ -380,34 +292,33 @@ class OraclePlatform extends Platform
 					colcnt++
 				}
 				buf.append(")")
-	
+
 				stmts.add(buf.toString())
 			}
 		}
-				
+
 		return stmts
 	}
 
 	@Override
-	public String generateDDLTypeName(int typeCode)
-	{
+	public String generateDDLTypeName(int typeCode) {
 		String typeName
-		 
-		if (StdTypeMap.containsKey(typeCode)) {
-			typeName = StdTypeMap[typeCode]
+
+		if (stdTypesMap.containsKey(typeCode)) {
+			typeName = stdTypesMap[typeCode]
+		} else {
+			typeName = TypeMap.getTypeName(typeCode)	
 		}
-		else {
-			// use default type map
-			typeName = TypeMap.getTypeName(typeCode)
+
+		if (typeCode == 4) {
+			println "Type Name : " + typeName
 		}
-		
 		return typeName
 	}
 
 	@Override
-	public String generateDDLEndOfLine()
-	{
+	public String generateDDLEndOfLine() {
 		return ";"
 	}
-				
+
 }
